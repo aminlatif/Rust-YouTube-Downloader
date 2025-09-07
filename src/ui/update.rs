@@ -1,5 +1,7 @@
+use crate::ui::state::FormatListItem;
+
 use super::{message::Message as UIMessage, state::DownloaderUIState};
-use iced::Task;
+use iced::{widget::combo_box, Task};
 
 pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -> Task<UIMessage> {
     match message {
@@ -14,7 +16,11 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
         UIMessage::InstallLibraries => {
             downloader_ui_state.status_message = "Installing libraries...".to_string();
             downloader_ui_state.disabled = true;
-            let _ = downloader_ui_state.sender.as_ref().unwrap().send(UIMessage::InstallLibraries);
+            let _ = downloader_ui_state
+                .sender
+                .as_ref()
+                .unwrap()
+                .send(UIMessage::InstallLibraries);
 
             Task::none()
         }
@@ -26,7 +32,11 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
         UIMessage::UpdateLibraries => {
             downloader_ui_state.status_message = "Updating libraries...".to_string();
             downloader_ui_state.disabled = true;
-            let _ = downloader_ui_state.sender.as_ref().unwrap().send(UIMessage::UpdateLibraries);
+            let _ = downloader_ui_state
+                .sender
+                .as_ref()
+                .unwrap()
+                .send(UIMessage::UpdateLibraries);
             Task::none()
         }
         UIMessage::LibrariesUpdated => {
@@ -36,7 +46,11 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
         }
         UIMessage::UrlChanged(url) => {
             downloader_ui_state.video_url = url.clone();
-            let _ =downloader_ui_state.sender.as_ref().unwrap().send(UIMessage::UrlChanged(url));
+            let _ = downloader_ui_state
+                .sender
+                .as_ref()
+                .unwrap()
+                .send(UIMessage::UrlChanged(url));
             Task::none()
         }
         UIMessage::FetchInfo => {
@@ -49,7 +63,11 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
             downloader_ui_state.video_channel_id = String::new();
             downloader_ui_state.video_description = String::new();
             downloader_ui_state.thumbnail_path = None;
-            let _ = downloader_ui_state.sender.as_ref().unwrap().send(UIMessage::FetchInfo);
+            let _ = downloader_ui_state
+                .sender
+                .as_ref()
+                .unwrap()
+                .send(UIMessage::FetchInfo);
             Task::none()
         }
         UIMessage::InfoFetched(video_info) => {
@@ -61,13 +79,38 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
             downloader_ui_state.video_channel = video_info.channel;
             downloader_ui_state.video_channel_id = video_info.channel_id;
             downloader_ui_state.video_description = video_info.description;
+            downloader_ui_state.video_formats = video_info.formats;
+            downloader_ui_state.format_selection_list_video = combo_box::State::new(
+                downloader_ui_state
+                    .video_formats
+                    .clone()
+                    .into_iter()
+                    .filter(|format| format.format_note.as_ref().unwrap() != "storyboard")
+                    .filter(|format| format.is_video())
+                    .map(|format| FormatListItem::new(&format))
+                    .collect(),
+            );
+            downloader_ui_state.format_selection_list_audio = combo_box::State::new(
+                downloader_ui_state
+                    .video_formats
+                    .clone()
+                    .into_iter()
+                    .filter(|format| format.format_note.as_ref().unwrap() != "storyboard")
+                    .filter(|format| format.is_audio())
+                    .map(|format| FormatListItem::new(&format))
+                    .collect(),
+            );
 
             Task::done(UIMessage::FetchThumbnail)
         }
         UIMessage::FetchThumbnail => {
             downloader_ui_state.status_message = "Fetching Video Thumbnail...".to_string();
             downloader_ui_state.disabled = true;
-            let _ = downloader_ui_state.sender.as_ref().unwrap().send(UIMessage::FetchThumbnail);
+            let _ = downloader_ui_state
+                .sender
+                .as_ref()
+                .unwrap()
+                .send(UIMessage::FetchThumbnail);
             Task::none()
         }
         UIMessage::ThumbnailFetched(thumbnail_path) => {
@@ -78,17 +121,42 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
             downloader_ui_state.show_download_button = true;
             Task::none()
         }
+        UIMessage::SelectAudioFormat(format) => {
+            downloader_ui_state.selected_format_audio = Some(format.clone());
+             let _ = downloader_ui_state
+                .sender
+                .as_ref()
+                .unwrap()
+                .send(UIMessage::SelectAudioFormat(format));
+            Task::none()
+        }
+        UIMessage::SelectVideoFormat(format) => {
+            downloader_ui_state.selected_format_video = Some(format.clone());
+            let _ = downloader_ui_state
+                .sender
+                .as_ref()
+                .unwrap()
+                .send(UIMessage::SelectVideoFormat(format));
+            Task::none()
+        }
         UIMessage::DownloadVideo => {
             downloader_ui_state.is_video_downloading = true;
             downloader_ui_state.status_message = "Downloading Video...".to_string();
             downloader_ui_state.disabled = true;
 
-            let _ = downloader_ui_state.sender.as_ref().unwrap().send(UIMessage::DownloadVideo);
+            let _ = downloader_ui_state
+                .sender
+                .as_ref()
+                .unwrap()
+                .send(UIMessage::DownloadVideo);
 
             Task::none()
         }
         UIMessage::VideoDownloaded(video_path) => {
-            downloader_ui_state.status_message = format!("Video Downloaded to {}.", video_path.clone().unwrap().display());
+            downloader_ui_state.status_message = format!(
+                "Video Downloaded to {}.",
+                video_path.clone().unwrap().display()
+            );
             downloader_ui_state.disabled = false;
 
             downloader_ui_state.video_path = video_path;

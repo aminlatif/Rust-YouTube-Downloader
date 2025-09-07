@@ -1,10 +1,13 @@
 use super::{message::Message as UIMessage, state::DownloaderUIState};
 use iced::{
+    futures::future::Select,
     widget::{
-        button, column, container, progress_bar, row, text, text_input, Column, Image, Row, Scrollable, Text
+        button, column, combo_box, container, progress_bar, row, text, text_input, Column, Image,
+        Row, Scrollable, Text,
     },
     Alignment, Element, Length,
 };
+use tracing_subscriber::field::display::Messages;
 
 pub fn view(downloader_ui_state: &DownloaderUIState) -> Element<UIMessage> {
     let main_column = Column::new()
@@ -81,26 +84,42 @@ pub fn view(downloader_ui_state: &DownloaderUIState) -> Element<UIMessage> {
                 .height(150.0),
         )
         .push(
-            if downloader_ui_state.show_download_button
-                && !downloader_ui_state.is_video_downloading
-                && !downloader_ui_state.is_video_downloaded
-            {
-                match &downloader_ui_state.disabled {
-                    true => button("Download Video"),
-                    false => button("Download Video").on_press(UIMessage::DownloadVideo),
-                }
-            } else if downloader_ui_state.is_video_downloading {
-                button("Downloading Video, Please Wait...")
-            } else if downloader_ui_state.is_video_downloaded {
-                button("Download Completed")
-            } else {
-                button("Download Video").height(0.0)
-            },
+            Row::new()
+                .spacing(10.0)
+                .push(combo_box(
+                    &downloader_ui_state.format_selection_list_video,
+                    "Select Video format...",
+                    downloader_ui_state.selected_format_video.as_ref(),
+                    |format| UIMessage::SelectVideoFormat(format),
+                ))
+                .push(combo_box(
+                    &downloader_ui_state.format_selection_list_audio,
+                    "Select Audio format...",
+                    downloader_ui_state.selected_format_audio.as_ref(),
+                    |format| UIMessage::SelectAudioFormat(format),
+                ))
+                .push(
+                    if downloader_ui_state.show_download_button
+                        && !downloader_ui_state.is_video_downloading
+                        && !downloader_ui_state.is_video_downloaded
+                    {
+                        match &downloader_ui_state.disabled {
+                            true => button("Download Video"),
+                            false => button("Download Video").on_press(UIMessage::DownloadVideo),
+                        }
+                    } else if downloader_ui_state.is_video_downloading {
+                        button("Downloading Video, Please Wait...")
+                    } else if downloader_ui_state.is_video_downloaded {
+                        button("Download Completed")
+                    } else {
+                        button("Download Video").height(0.0)
+                    },
+                ),
         )
         .push(
             Row::new()
                 .spacing(10.0)
-                .push(progress_bar(0.0..=100.0, downloader_ui_state.progress))
+                .push(progress_bar(0.0..=100.0, downloader_ui_state.progress)),
         );
     let main_container = container(main_column)
         .width(Length::Fill)

@@ -94,6 +94,12 @@ fn main() -> iced::Result {
                                 }
                             };
                         }
+                        Ok(UIMessage::SelectAudioFormat(format)) => {
+                            video_downloader.selected_audio_format = Some(format.format_id);
+                        }
+                        Ok(UIMessage::SelectVideoFormat(format)) => {
+                            video_downloader.selected_video_format = Some(format.format_id);
+                        }
                         Ok(UIMessage::DownloadVideo) => {
                             debug!("Worker thread received DownloadVideo message.");
                             let worker_to_ui_tx_4 = worker_to_ui_tx.clone();

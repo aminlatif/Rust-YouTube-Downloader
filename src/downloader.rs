@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::fs;
 
+use super::ui::message::Message as UIMessage;
 use anyhow::Result;
 use std::path::PathBuf;
 use tracing::{debug, error, info};
-use super::ui::message::Message as UIMessage;
 use yt_dlp::model::ExtractorInfo;
 use yt_dlp::model::Version;
 use yt_dlp::model::Video;
@@ -25,6 +25,8 @@ pub struct VideoDownloader {
     pub video_info: Video,
     pub thumbnail_path: Option<PathBuf>,
     pub video_path: Option<PathBuf>,
+    pub selected_audio_format: Option<String>,
+    pub selected_video_format: Option<String>,
 }
 
 impl Default for VideoDownloader {
@@ -93,6 +95,8 @@ impl VideoDownloader {
             },
             thumbnail_path: None,
             video_path: None,
+            selected_audio_format: None,
+            selected_video_format: None,
         }
     }
 }
@@ -168,29 +172,92 @@ pub async fn download_video(
     let video_fetcher = video_downloader.fetcher.clone();
     let tx_clone = tx.clone();
     video_downloader.video_path = Some(video_path.clone().into());
+    let video_path_clone = video_path.clone();
 
     debug!("Starting Download...");
 
-    let download_id = video_fetcher
-        .download_video_with_progress(&video_info, video_path, move |downloaded, total| {
-            let percentage = if total > 0 {
-                (downloaded as f64 / total as f64 * 100.0) as u64
-            } else {
-                0
-            };
-            let _ =tx_clone.send(UIMessage::ProgressUpdated(downloaded as f64, percentage as f32));
-            info!("Progress: {}/{} bytes ({}%)", downloaded, total, percentage);
-        })
+    // let video_path = video_fetcher.download_video_from_url(video_downloader.video_url.clone(), "my-video.mp4").await?;
+    // Ok(video_path)
+
+    let video_download_progress_callback = move |downloaded: u64, total: u64| {
+        let percentage = if total > 0 {
+            (downloaded as f64 / total as f64 * 100.0) as u64
+        } else {
+            0
+        };
+        let _ = tx_clone.send(UIMessage::ProgressUpdated(
+            downloaded as f64,
+            percentage as f32,
+        ));
+        info!(
+            "Video Download Progress: {}/{} bytes ({}%)",
+            downloaded, total, percentage
+        );
+    };
+
+    let audio_download_progress_callback = move |downloaded: u64, total: u64| {
+        let percentage = if total > 0 {
+            (downloaded as f64 / total as f64 * 100.0) as u64
+        } else {
+            0
+        };
+        // let _ = tx_clone.send(UIMessage::ProgressUpdated(
+        //     downloaded as f64,
+        //     percentage as f32,
+        // ));
+        info!(
+            "Audio DownloadProgress: {}/{} bytes ({}%)",
+            downloaded, total, percentage
+        );
+    };
+
+    let (video_download_id, audio_download_id, video_temp_file_name, audio_temp_file_name) = video_fetcher
+        .download_video_with_progress_format(
+            &video_info,
+            video_path,
+            video_downloader.selected_video_format.clone(),
+            video_downloader.selected_audio_format.clone(),
+            video_download_progress_callback,
+            audio_download_progress_callback,
+        )
         .await
         .expect("Failed to download video");
-
-    debug!("download id: {}", download_id);
-
+    debug!(
+        "video download id: {}, audio download id: {}",
+        video_download_id, audio_download_id
+    );
     video_fetcher
-        .wait_for_download(download_id)
+        .wait_for_download(video_download_id)
         .await
-        .expect("Waiting for download to finish failed");
+        .expect("Waiting for video download to finish failed");
+    debug!("Video Downloaded to {}.", video_temp_file_name);
+    video_fetcher
+        .wait_for_download(audio_download_id)
+        .await
+        .expect("Waiting for audio download to finish failed");
+    debug!("Audio Downloaded to {}.", audio_temp_file_name);
+
     debug!("Download finished");
+
+    debug!("Combining audio and video...");
+    let output_path = video_fetcher.combine_audio_and_video(
+        video_temp_file_name,
+        audio_temp_file_name,
+        video_path_clone,
+    ).await.expect("Failed to combine audio and video");
+    debug!("Combined audio and video to {}.", output_path.display());
+
+    // let video_download_id = video_fetcher
+    //     .download_video_with_progress(&video_info, video_path, video_download_progress_callback)
+    //     .await
+    //     .expect("Failed to download video");
+    // debug!("video download id: {}", video_download_id);
+    // video_fetcher
+    //     .wait_for_download(video_download_id)
+    //     .await
+    //     .expect("Waiting for video download to finish failed");
+
+
 
     debug!("removing temp files...");
     for entry in fs::read_dir(video_downloader.output_dir.clone())? {
@@ -204,6 +271,7 @@ pub async fn download_video(
             }
         }
     }
+    debug!("temp files removed");
 
     debug!("Downloading captions...");
     for caption_group in &video_downloader.video_info.automatic_captions {
@@ -234,6 +302,7 @@ pub async fn download_video(
             }
         }
     }
+    debug!("Captions downloaded.");
 
     Ok(video_downloader.video_path.clone().unwrap())
 }
