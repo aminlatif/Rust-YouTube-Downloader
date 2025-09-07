@@ -4,10 +4,13 @@ use yt_dlp::model::Video;
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Increment,
-    Decrement,
     Number(i32),
-    WindowResized(Size),
+    StatusMessage(String),
+    Disabled(bool),
+    InstallLibraries,
+    LibrariesInstalled,
+    UpdateLibraries,
+    LibrariesUpdated,
     UIUpdated,
     UrlChanged(String),
     FetchInfo,
@@ -16,4 +19,5 @@ pub enum Message {
     ThumbnailFetched(Option<PathBuf>),
     DownloadVideo,
     VideoDownloaded(Option<PathBuf>),
+    ProgressUpdated(f64, f32)
 }

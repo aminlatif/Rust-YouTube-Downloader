@@ -1,9 +1,8 @@
-use super::super::downloader::VideoDownloader;
-use std::{path::PathBuf, sync::Arc};
-use tokio::sync::{mpsc::{ UnboundedReceiver, UnboundedSender}, RwLock};
+use std::path::PathBuf;
 
 pub struct DownloaderUIState {
-    pub video_downloader: Arc<RwLock<VideoDownloader>>,
+    pub status_message: String,
+    pub disabled: bool,
     pub reciever: Option<tokio::sync::broadcast::Receiver<super::message::Message>>,
     pub sender: Option<tokio::sync::broadcast::Sender<super::message::Message>>,
     pub executables_dir: String,
@@ -23,12 +22,16 @@ pub struct DownloaderUIState {
     pub show_download_button: bool,
     pub is_video_downloading: bool,
     pub is_video_downloaded: bool,
+    pub video_size: f64,
+    pub downloaded_size: f64,
+    pub progress: f32
 }
 
 impl Default for DownloaderUIState {
     fn default() -> Self {
         Self {
-            video_downloader: Arc::new(RwLock::new(VideoDownloader::default())),
+            status_message: String::from("Ready"),
+            disabled: false,
             reciever: None,
             sender: None,
             executables_dir: String::from("libs"),
@@ -48,6 +51,9 @@ impl Default for DownloaderUIState {
             show_download_button: false,
             is_video_downloading: false,
             is_video_downloaded: false,
+            video_size: 0.0,
+            downloaded_size: 0.0,
+            progress: 0.0
         }
     }
 }

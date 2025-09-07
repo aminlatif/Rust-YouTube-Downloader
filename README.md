@@ -7,7 +7,7 @@ Rust vesion: 1.88.0
 
 ### External Binaries:
 - [ffmpeg](https://ffmpeg.org/)
-- [yt-dlp.exe](https://github.com/yt-dlp/yt-dlp)
+- [yt-dlp.exe](https://github.com/yt-dlp/yt-dlp) -> yt-dlp ={ git = "https://github.com/boul2gom/yt-dlp", rev="e447714", features = ["tracing"] }
 
 ### Important Crates:
 - [yt-dlp](https://crates.io/crates/yt-dlp)

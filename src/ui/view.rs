@@ -1,11 +1,13 @@
-use super::{message::Message, state::DownloaderUIState};
+use super::{message::Message as UIMessage, state::DownloaderUIState};
 use iced::{
-    widget::{button, text, text_input, Column, Image, Row, Scrollable, Text},
-    Element,
+    widget::{
+        button, column, container, progress_bar, row, text, text_input, Column, Image, Row, Scrollable, Text
+    },
+    Alignment, Element, Length,
 };
 
-pub fn view(downloader_ui_state: &DownloaderUIState) -> Element<Message> {
-    Column::new()
+pub fn view(downloader_ui_state: &DownloaderUIState) -> Element<UIMessage> {
+    let main_column = Column::new()
         .padding(20.0)
         .spacing(10.0)
         .push(
@@ -18,17 +20,32 @@ pub fn view(downloader_ui_state: &DownloaderUIState) -> Element<Message> {
                 .push(text(format!(
                     "output dir: ./{}",
                     downloader_ui_state.output_dir
-                ))),
+                )))
+                .push(match &downloader_ui_state.disabled {
+                    true => button("Install Libraries"),
+                    false => button("Install Libraries").on_press(UIMessage::InstallLibraries),
+                })
+                .push(match &downloader_ui_state.disabled {
+                    true => button("Update Libraries"),
+                    false => button("Update Libraries").on_press(UIMessage::UpdateLibraries),
+                })
+                .align_y(Alignment::Center),
         )
         .push(
             Row::new()
                 .spacing(10.0)
-                .push(
-                    text_input("Video URL", downloader_ui_state.video_url.as_str())
+                .push(match &downloader_ui_state.disabled {
+                    true => {
+                        text_input("Video URL", downloader_ui_state.video_url.as_str()).size(16)
+                    }
+                    false => text_input("Video URL", downloader_ui_state.video_url.as_str())
                         .size(16)
-                        .on_input(|entered_text| Message::UrlChanged(entered_text)),
-                )
-                .push(button("Get Info").on_press(Message::FetchInfo)),
+                        .on_input(|entered_text| UIMessage::UrlChanged(entered_text)),
+                })
+                .push(match &downloader_ui_state.disabled {
+                    true => button("Get Info"),
+                    false => button("Get Info").on_press(UIMessage::FetchInfo),
+                }),
         )
         .push(
             Row::new()
@@ -68,7 +85,10 @@ pub fn view(downloader_ui_state: &DownloaderUIState) -> Element<Message> {
                 && !downloader_ui_state.is_video_downloading
                 && !downloader_ui_state.is_video_downloaded
             {
-                button("Download Video").on_press(Message::DownloadVideo)
+                match &downloader_ui_state.disabled {
+                    true => button("Download Video"),
+                    false => button("Download Video").on_press(UIMessage::DownloadVideo),
+                }
             } else if downloader_ui_state.is_video_downloading {
                 button("Downloading Video, Please Wait...")
             } else if downloader_ui_state.is_video_downloaded {
@@ -77,5 +97,20 @@ pub fn view(downloader_ui_state: &DownloaderUIState) -> Element<Message> {
                 button("Download Video").height(0.0)
             },
         )
-        .into()
+        .push(
+            Row::new()
+                .spacing(10.0)
+                .push(progress_bar(0.0..=100.0, downloader_ui_state.progress))
+        );
+    let main_container = container(main_column)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+    let status_bar: iced::widget::Row<'_, UIMessage, _, _> =
+        row![text(downloader_ui_state.status_message.clone()).size(12)]
+            .spacing(10)
+            .align_y(Alignment::Center);
+    let status_bar_container = container(status_bar).padding(8).width(Length::Fill);
+
+    column![main_container, status_bar_container].into()
 }

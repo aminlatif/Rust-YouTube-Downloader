@@ -1,129 +1,16 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io;
-use std::process::Output;
-use std::sync::Arc;
-use tokio::sync::{Mutex, MutexGuard, RwLock, RwLockWriteGuard};
 
 use anyhow::Result;
-use clap::Parser;
 use std::path::PathBuf;
-use tracing::{debug, error, info, trace, warn};
-use tracing_subscriber;
-use tracing_subscriber::fmt::format;
-use yt_dlp::fetcher::thumbnail;
-use yt_dlp::model::format::VideoResolution;
+use tracing::{debug, error, info};
+use super::ui::message::Message as UIMessage;
 use yt_dlp::model::ExtractorInfo;
 use yt_dlp::model::Version;
 use yt_dlp::model::Video;
-use yt_dlp::{
-    fetcher::deps::{Libraries, LibraryInstaller},
-    Youtube,
-};
+use yt_dlp::{fetcher::deps::Libraries, Youtube};
 
-#[derive(Debug)]
-pub struct DownloadedVideoInfo {
-    thumbnail_path: Option<PathBuf>,
-    video_path: Option<PathBuf>,
-}
-
-pub async fn download(
-    executables_dir: &PathBuf,
-    output_dir: &PathBuf,
-    video_url: &str,
-) -> Result<DownloadedVideoInfo, yt_dlp::error::Error> {
-    let youtube = executables_dir.join("yt-dlp");
-    let ffmpeg = executables_dir.join("ffmpeg");
-
-    let libraries = Libraries::new(youtube, ffmpeg);
-    let fetcher = Youtube::new(libraries, output_dir)?;
-
-    let url = String::from(video_url);
-
-    let mut output_file_name = url.split('/').last().unwrap().to_string();
-
-    let video_infos: Option<Video> = match fetcher.fetch_video_infos(url.clone()).await {
-        Ok(video_infos) => {
-            println!("Video infos recieved.");
-            output_file_name = video_infos.title.clone();
-            Some(video_infos)
-        }
-        Err(e) => {
-            error!("Error fetching video infos: {}", e);
-            None
-        }
-    };
-
-    for caption_group in video_infos.unwrap().automatic_captions {
-        let caption_languages = caption_group.0;
-        if caption_languages.contains("en") || caption_languages.contains("orig") {
-            for caption in caption_group.1 {
-                let caption_extension = caption.extension;
-                if caption_extension.to_string() == "srt" || caption_extension.to_string() == "vtt"
-                {
-                    let caption_url = caption.url;
-                    let response = reqwest::get(caption_url).await?.text().await?;
-                    let mut caption_file_path = "output/".to_string() + &output_file_name;
-                    if caption_languages.contains("orig") {
-                        let original_language = caption_languages.replace("-orig", "");
-                        caption_file_path = caption_file_path + "." + &original_language + ".";
-                    } else {
-                        caption_file_path = caption_file_path + ".en.";
-                    }
-
-                    caption_file_path = caption_file_path + caption_extension.to_string().as_str();
-
-                    fs::write(caption_file_path, response).unwrap();
-                }
-            }
-        }
-    }
-
-    let thumbnail_path: Option<PathBuf> = match fetcher
-        .download_thumbnail_from_url(url.clone(), output_file_name.clone() + ".jpg")
-        .await
-    {
-        Ok(path) => {
-            println!("Thumbnail downloaded to: {}", path.display());
-            Some(path)
-        }
-        Err(e) => {
-            error!("Error downloading thumbnail: {}", e);
-            None
-        }
-    };
-
-    let video_path: Option<PathBuf> = match fetcher
-        .download_video_from_url(url.clone(), output_file_name.clone() + ".mp4")
-        .await
-    {
-        Ok(path) => {
-            println!("Video downloaded to: {}", path.display());
-            Some(path)
-        }
-        Err(e) => {
-            error!("Error downloading video: {}", e);
-            None
-        }
-    };
-
-    for entry in fs::read_dir("output")? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        if !file_type.is_dir() {
-            if entry.file_name().to_str().unwrap().contains("temp_audio_")
-                || entry.file_name().to_str().unwrap().contains("temp_video_")
-            {
-                fs::remove_file(entry.path())?;
-            }
-        }
-    }
-
-    Ok(DownloadedVideoInfo {
-        thumbnail_path,
-        video_path,
-    })
-}
+use crate::ui::message::Message;
 
 #[derive(Debug)]
 pub struct VideoDownloader {
@@ -210,23 +97,18 @@ impl VideoDownloader {
     }
 }
 
-pub fn change_video_url(
-    mut video_downloader: RwLockWriteGuard<'_, VideoDownloader>,
-    video_url: String,
-) {
+pub fn change_video_url(video_downloader: &mut VideoDownloader, video_url: String) {
     video_downloader.video_url = video_url;
 }
 
-pub async fn get_video_info(
-    mut video_downloader: RwLockWriteGuard<'_, VideoDownloader>,
-) -> anyhow::Result<()> {
+pub async fn get_video_info(video_downloader: &mut VideoDownloader) -> anyhow::Result<Video> {
     match video_downloader
         .fetcher
         .fetch_video_infos(video_downloader.video_url.clone())
         .await
     {
         Ok(video_info) => {
-            println!("Video infos recieved.");
+            debug!("Video infos recieved.");
             video_downloader.video_info = video_info;
             video_downloader.output_file_name =
                 sanitize_filename(video_downloader.video_info.title.clone().as_str())
@@ -239,7 +121,7 @@ pub async fn get_video_info(
                 format!("{:#?}", video_downloader.video_info),
             )
             .unwrap();
-            Ok(())
+            Ok(video_downloader.video_info.clone())
         }
         Err(e) => {
             error!("Error fetching video infos: {}", e);
@@ -249,8 +131,8 @@ pub async fn get_video_info(
 }
 
 pub async fn get_video_thumbnail(
-    mut video_downloader: RwLockWriteGuard<'_, VideoDownloader>,
-) -> anyhow::Result<()> {
+    video_downloader: &mut VideoDownloader,
+) -> anyhow::Result<PathBuf> {
     let thumbnail_extension = video_downloader
         .video_info
         .thumbnail
@@ -267,7 +149,7 @@ pub async fn get_video_thumbnail(
     {
         Ok(path) => {
             video_downloader.thumbnail_path = Some(path);
-            Ok(())
+            Ok(video_downloader.thumbnail_path.clone().unwrap())
         }
         Err(e) => {
             error!("Error downloading thumbnail: {}", e);
@@ -277,49 +159,40 @@ pub async fn get_video_thumbnail(
 }
 
 pub async fn download_video(
-    mut video_downloader: RwLockWriteGuard<'_, VideoDownloader>,
-) -> anyhow::Result<()> {
-    // video_downloader.video_path = match video_downloader.fetcher
-    //     .download_video_from_url(video_downloader.video_url.clone(), video_downloader.output_file_name.clone() + ".mp4")
-    //     .await
-    // {
-    //     Ok(path) => {
-    //         println!("Video downloaded to: {}", path.display());
-    //         Some(path)
-    //     }
-    //     Err(e) => {
-    //         error!("Error downloading video: {}", e);
-    //         None
-    //     }
-    // };
-    // tokio::task::spawn(async move || {
-    //     let download_id = video_downloader
-    //         .fetcher
-    //         .download_video_with_progress(
-    //             &video_downloader.video_info,
-    //             video_downloader.output_file_name.clone() + ".mp4",
-    //             |downloaded, total| {
-    //                 println!("Progress: {}/{}", downloaded, total);
-    //                 // let percentage = if total > 0 {
-    //                 //     (downloaded as f64 / total as f64 * 100.0) as u64
-    //                 // } else {
-    //                 //     0
-    //                 // };
-    //                 // println!("Progress: {}/{} bytes ({}%)", downloaded, total, percentage);
-    //             },
-    //         )
-    //         .await
-    //         .unwrap();
-    //     println!("Download ID: {}", download_id);
+    video_downloader: &mut VideoDownloader,
+    tx: &tokio::sync::broadcast::Sender<Message>,
+) -> anyhow::Result<PathBuf> {
+    debug!("Downloading video...");
+    let video_info = video_downloader.video_info.clone();
+    let video_path = video_downloader.output_file_name.clone() + ".mp4";
+    let video_fetcher = video_downloader.fetcher.clone();
+    let tx_clone = tx.clone();
+    video_downloader.video_path = Some(video_path.clone().into());
 
-    //     video_downloader
-    //         .fetcher
-    //         .wait_for_download(download_id)
-    //         .await;
-    // })
-    // .await
-    // .unwrap();
+    debug!("Starting Download...");
 
+    let download_id = video_fetcher
+        .download_video_with_progress(&video_info, video_path, move |downloaded, total| {
+            let percentage = if total > 0 {
+                (downloaded as f64 / total as f64 * 100.0) as u64
+            } else {
+                0
+            };
+            let _ =tx_clone.send(UIMessage::ProgressUpdated(downloaded as f64, percentage as f32));
+            info!("Progress: {}/{} bytes ({}%)", downloaded, total, percentage);
+        })
+        .await
+        .expect("Failed to download video");
+
+    debug!("download id: {}", download_id);
+
+    video_fetcher
+        .wait_for_download(download_id)
+        .await
+        .expect("Waiting for download to finish failed");
+    debug!("Download finished");
+
+    debug!("removing temp files...");
     for entry in fs::read_dir(video_downloader.output_dir.clone())? {
         let entry = entry?;
         let file_type = entry.file_type()?;
@@ -332,6 +205,7 @@ pub async fn download_video(
         }
     }
 
+    debug!("Downloading captions...");
     for caption_group in &video_downloader.video_info.automatic_captions {
         let caption_languages = caption_group.0;
         if caption_languages.contains("en")
@@ -361,11 +235,10 @@ pub async fn download_video(
         }
     }
 
-    Ok(())
+    Ok(video_downloader.video_path.clone().unwrap())
 }
 
 fn sanitize_filename(input: &str) -> String {
-    // Keep only alphanumeric, dash, underscore, and dot
     let re = regex::Regex::new(r"[^ a-zA-Z0-9_\.-]").unwrap();
     re.replace_all(input, "").to_string()
 }

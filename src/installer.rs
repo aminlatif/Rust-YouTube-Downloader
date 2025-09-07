@@ -1,5 +1,6 @@
 use std::fs;
 use std::io;
+use tracing::{debug, warn};
 
 use anyhow::Result;
 use std::path::PathBuf;
@@ -8,20 +9,24 @@ use yt_dlp::{
     Youtube,
 };
 
-pub async fn install(executables_dir: &PathBuf) {
-    install_ffmpeg(&executables_dir)
+pub async fn install(executables_dir: &PathBuf) -> Result<(PathBuf, PathBuf)> {
+    let install_ffmpeg_result = install_ffmpeg(&executables_dir)
         .await
         .expect("Failed to install ffmpeg");
 
-    install_yt_dlp(&executables_dir)
+    let install_yt_dlp_result = install_yt_dlp(&executables_dir)
         .await
         .expect("Failed to install yt-dlp");
+
+    Ok((install_ffmpeg_result, install_yt_dlp_result))
 }
 
-pub async fn update(executables_dir: &PathBuf) {
-    update_yt_dlp(&executables_dir)
+pub async fn update(executables_dir: &PathBuf) -> Result<PathBuf> {
+    let install_yt_dlp_result = update_yt_dlp(&executables_dir)
         .await
         .expect("Failed to update yt-dlp");
+
+    Ok(install_yt_dlp_result)
 }
 
 pub async fn install_ffmpeg(executables_dir: &PathBuf) -> Result<PathBuf> {
@@ -29,21 +34,21 @@ pub async fn install_ffmpeg(executables_dir: &PathBuf) -> Result<PathBuf> {
     let ffmpeg = ffmpeg_intaller.install_ffmpeg(Some("ff".to_string())).await;
     match ffmpeg {
         Ok(_) => {
-            println!("FFmpeg installed");
+            debug!("FFmpeg installed");
             return Ok(ffmpeg.unwrap());
         }
-        Err(e) => {
+        Err(_e) => {
             let source_directory = "libs\\ffmpeg-release\\ffmpeg-8.0-essentials_build\\bin";
             let destination_directory = "libs";
 
-            println!("Moving to default ffmpeg path: from {source_directory} to {destination_directory}:");
+            debug!("Moving to default ffmpeg path: from {source_directory} to {destination_directory}:");
             match fs::create_dir(destination_directory) {
-                Ok(_) => println!("{destination_directory} directory created"),
+                Ok(_) => debug!("{destination_directory} directory created"),
                 Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                    println!("{destination_directory} directory already exists")
+                    debug!("{destination_directory} directory already exists")
                 }
                 Err(e) => {
-                    eprintln!("Failed to create directory: {e}");
+                    debug!("Failed to create directory: {e}");
                     return Err(e.into());
                 }
             }
@@ -52,19 +57,22 @@ pub async fn install_ffmpeg(executables_dir: &PathBuf) -> Result<PathBuf> {
                 let entry = entry?;
                 let file_type = entry.file_type()?;
                 if !file_type.is_dir() {
-                    let destination_path  = PathBuf::from(destination_directory);
+                    let destination_path = PathBuf::from(destination_directory);
                     fs::copy(entry.path(), destination_path.join(entry.file_name()))?;
                 }
             }
 
             match fs::remove_dir_all("libs\\ffmpeg-release") {
-                Ok(_) => println!("libs\\ffmpeg-release directory removed"),
-                Err(e) => eprintln!("Failed to remove directory libs\\ffmpeg-release: {e}"),
+                Ok(_) => debug!("libs\\ffmpeg-release directory removed"),
+                Err(e) => warn!("Failed to remove directory libs\\ffmpeg-release: {e}"),
             }
 
-            return Ok(PathBuf::from(
-                "libs\\ffmpeg",
-            ));
+            match fs::remove_file("libs\\ffmpeg-release.zip") {
+                Ok(_) => debug!("libs\\ffmpeg-release.zip removed"),
+                Err(e) => warn!("Failed to remove libs\\ffmpeg-release.zip: {e}"),
+            }
+
+            return Ok(PathBuf::from("libs\\ffmpeg"));
         }
     }
 }
@@ -74,7 +82,7 @@ pub async fn install_yt_dlp(executables_dir: &PathBuf) -> Result<PathBuf> {
     let yt_dlp = intaller.install_youtube(None).await;
     match yt_dlp {
         Ok(_) => {
-            println!("yt-dlp installed");
+            debug!("yt-dlp installed");
             return Ok(yt_dlp.unwrap());
         }
         Err(e) => {
@@ -83,7 +91,7 @@ pub async fn install_yt_dlp(executables_dir: &PathBuf) -> Result<PathBuf> {
     }
 }
 
-pub async fn update_yt_dlp(executables_dir: &PathBuf) -> Result<()> {
+pub async fn update_yt_dlp(executables_dir: &PathBuf) -> Result<PathBuf> {
     let youtube = executables_dir.join("yt-dlp");
     let ffmpeg = executables_dir.join("ffmpeg");
     let output_dir = PathBuf::from("output");
@@ -94,6 +102,5 @@ pub async fn update_yt_dlp(executables_dir: &PathBuf) -> Result<()> {
 
     fetcher.update_downloader().await?;
 
-    Ok(())
+    Ok(executables_dir.join("yt-dlp"))
 }
-
