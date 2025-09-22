@@ -51,6 +51,9 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
                 .as_ref()
                 .unwrap()
                 .send(UIMessage::UrlChanged(url));
+            downloader_ui_state.disabled = false;
+            downloader_ui_state.is_video_downloaded = false;
+            downloader_ui_state.is_video_downloading = false;
             Task::none()
         }
         UIMessage::FetchInfo => {
@@ -74,12 +77,78 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
             downloader_ui_state.status_message = "Video Info Fetched.".to_string();
             downloader_ui_state.disabled = false;
 
+            let auto_selected_video_format = video_info.best_video_format().unwrap().clone();
+            let auto_selected_audio_format = video_info.best_audio_format().unwrap().clone();
+
+            let mut auto_selected_video_format_id: String = String::new();
+            let mut auto_selected_video_format_match_level: i32 = 0;
+            let mut auto_selected_audio_format_id: String = String::new();
+            let mut auto_selected_audio_format_match_level: i32 = 0;
+
+            for video_format in &video_info.formats {
+                if video_format.is_video() {
+                    let mut video_format_match_level = 0;
+                    if video_format.format_id == auto_selected_video_format.format_id {
+                        auto_selected_video_format_id = video_format.format_id.clone();
+                        video_format_match_level = 1;
+                    }
+                    if video_format_match_level > auto_selected_video_format_match_level {
+                        auto_selected_video_format_match_level = video_format_match_level;
+                        break;
+                    }
+                }
+            }
+
+            for audio_format in &video_info.formats {
+                if audio_format.is_audio() {
+                    let mut audio_format_match_level = 0;
+                    if audio_format.quality_info.quality
+                        == auto_selected_audio_format.quality_info.quality
+                    {
+                        audio_format_match_level += 1;
+                    }
+                    if audio_format.codec_info.audio_ext
+                        == auto_selected_audio_format.codec_info.audio_ext
+                    {
+                        audio_format_match_level += 1;
+                    }
+                    if audio_format
+                        .format_note
+                        .as_ref()
+                        .unwrap()
+                        .contains("original")
+                    {
+                        audio_format_match_level += 2;
+                    }
+                    if audio_format.codec_info.audio_codec.clone().unwrap()
+                        == auto_selected_audio_format
+                            .codec_info
+                            .audio_codec
+                            .clone()
+                            .unwrap()
+                    {
+                        audio_format_match_level += 1;
+                    }
+
+                    if audio_format.format_id == auto_selected_audio_format.format_id {
+                        audio_format_match_level += 1;
+                    }
+
+                    if audio_format_match_level > auto_selected_audio_format_match_level {
+                        auto_selected_audio_format_id = audio_format.format_id.clone();
+                        auto_selected_audio_format_match_level = audio_format_match_level;
+                    }
+                }
+            }
+
             downloader_ui_state.video_id = video_info.id;
             downloader_ui_state.video_title = video_info.title;
             downloader_ui_state.video_channel = video_info.channel;
             downloader_ui_state.video_channel_id = video_info.channel_id;
             downloader_ui_state.video_description = video_info.description;
+
             downloader_ui_state.video_formats = video_info.formats;
+
             downloader_ui_state.format_selection_list_video = combo_box::State::new(
                 downloader_ui_state
                     .video_formats
@@ -100,6 +169,32 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
                     .map(|format| FormatListItem::new(&format))
                     .collect(),
             );
+
+            for format_selection_list_video_item in
+                downloader_ui_state.format_selection_list_video.options()
+            {
+                if format_selection_list_video_item.format_id == auto_selected_video_format_id {
+                    downloader_ui_state.selected_format_video =
+                        Some(format_selection_list_video_item.clone());
+                    let _ = downloader_ui_state.sender.as_ref().unwrap().send(
+                        UIMessage::SelectVideoFormat(format_selection_list_video_item.clone()),
+                    );
+                    break;
+                }
+            }
+
+            for format_selection_list_audio_item in
+                downloader_ui_state.format_selection_list_audio.options()
+            {
+                if format_selection_list_audio_item.format_id == auto_selected_audio_format_id {
+                    downloader_ui_state.selected_format_audio =
+                        Some(format_selection_list_audio_item.clone());
+                    let _ = downloader_ui_state.sender.as_ref().unwrap().send(
+                        UIMessage::SelectAudioFormat(format_selection_list_audio_item.clone()),
+                    );
+                    break;
+                }
+            }
 
             Task::done(UIMessage::FetchThumbnail)
         }
@@ -123,7 +218,7 @@ pub fn update(downloader_ui_state: &mut DownloaderUIState, message: UIMessage) -
         }
         UIMessage::SelectAudioFormat(format) => {
             downloader_ui_state.selected_format_audio = Some(format.clone());
-             let _ = downloader_ui_state
+            let _ = downloader_ui_state
                 .sender
                 .as_ref()
                 .unwrap()

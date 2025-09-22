@@ -1,10 +1,7 @@
-use std::{
-    fmt::{format, Display},
-    path::PathBuf,
-};
+use std::{fmt::Display, path::PathBuf};
 
 use iced::widget::combo_box;
-use yt_dlp::model::format::{Container, Extension};
+use yt_dlp::model::format::Container;
 
 #[derive(Debug, Clone)]
 pub struct FormatListItem {
@@ -84,24 +81,24 @@ impl Display for FormatListItem {
         }
 
         if self.file_size > 0 {
-            let mut refinedFileSize = self.file_size;
+            let mut refined_file_size = self.file_size;
             let mut unit = "B";
-            if refinedFileSize > 1024 {
-                refinedFileSize /= 1024 ;
+            if refined_file_size > 1024 {
+                refined_file_size /= 1024;
                 unit = "KB";
             }
 
-            if refinedFileSize > 1024 {
-                refinedFileSize /= 1024 ;
+            if refined_file_size > 1024 {
+                refined_file_size /= 1024;
                 unit = "MB";
             }
 
-            if refinedFileSize > 1024 {
-                refinedFileSize /= 1024 ;
+            if refined_file_size > 1024 {
+                refined_file_size /= 1024;
                 unit = "GB";
             }
 
-            display_text.push_str(format!(" {}{}", refinedFileSize, unit).as_str());
+            display_text.push_str(format!(" {}{}", refined_file_size, unit).as_str());
         }
         write!(f, "{}", display_text)
     }

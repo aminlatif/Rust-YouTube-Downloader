@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fs;
 
 use super::ui::message::Message as UIMessage;
-use anyhow::Result;
 use std::path::PathBuf;
 use tracing::{debug, error, info};
 use yt_dlp::model::ExtractorInfo;
@@ -125,6 +124,7 @@ pub async fn get_video_info(video_downloader: &mut VideoDownloader) -> anyhow::R
                 format!("{:#?}", video_downloader.video_info),
             )
             .unwrap();
+
             Ok(video_downloader.video_info.clone())
         }
         Err(e) => {
@@ -176,9 +176,6 @@ pub async fn download_video(
 
     debug!("Starting Download...");
 
-    // let video_path = video_fetcher.download_video_from_url(video_downloader.video_url.clone(), "my-video.mp4").await?;
-    // Ok(video_path)
-
     let video_download_progress_callback = move |downloaded: u64, total: u64| {
         let percentage = if total > 0 {
             (downloaded as f64 / total as f64 * 100.0) as u64
@@ -201,10 +198,7 @@ pub async fn download_video(
         } else {
             0
         };
-        // let _ = tx_clone.send(UIMessage::ProgressUpdated(
-        //     downloaded as f64,
-        //     percentage as f32,
-        // ));
+
         info!(
             "Audio DownloadProgress: {}/{} bytes ({}%)",
             downloaded, total, percentage
@@ -246,18 +240,6 @@ pub async fn download_video(
         video_path_clone,
     ).await.expect("Failed to combine audio and video");
     debug!("Combined audio and video to {}.", output_path.display());
-
-    // let video_download_id = video_fetcher
-    //     .download_video_with_progress(&video_info, video_path, video_download_progress_callback)
-    //     .await
-    //     .expect("Failed to download video");
-    // debug!("video download id: {}", video_download_id);
-    // video_fetcher
-    //     .wait_for_download(video_download_id)
-    //     .await
-    //     .expect("Waiting for video download to finish failed");
-
-
 
     debug!("removing temp files...");
     for entry in fs::read_dir(video_downloader.output_dir.clone())? {

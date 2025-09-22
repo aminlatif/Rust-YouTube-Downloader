@@ -1,13 +1,11 @@
 use super::{message::Message as UIMessage, state::DownloaderUIState};
 use iced::{
-    futures::future::Select,
     widget::{
         button, column, combo_box, container, progress_bar, row, text, text_input, Column, Image,
         Row, Scrollable, Text,
     },
     Alignment, Element, Length,
 };
-use tracing_subscriber::field::display::Messages;
 
 pub fn view(downloader_ui_state: &DownloaderUIState) -> Element<UIMessage> {
     let main_column = Column::new()
@@ -83,15 +81,15 @@ pub fn view(downloader_ui_state: &DownloaderUIState) -> Element<UIMessage> {
             Scrollable::new(Text::new(&downloader_ui_state.video_description).size(14))
                 .height(150.0),
         )
+        .push(combo_box(
+            &downloader_ui_state.format_selection_list_video,
+            "Select Video format...",
+            downloader_ui_state.selected_format_video.as_ref(),
+            |format| UIMessage::SelectVideoFormat(format),
+        ))
         .push(
             Row::new()
                 .spacing(10.0)
-                .push(combo_box(
-                    &downloader_ui_state.format_selection_list_video,
-                    "Select Video format...",
-                    downloader_ui_state.selected_format_video.as_ref(),
-                    |format| UIMessage::SelectVideoFormat(format),
-                ))
                 .push(combo_box(
                     &downloader_ui_state.format_selection_list_audio,
                     "Select Audio format...",

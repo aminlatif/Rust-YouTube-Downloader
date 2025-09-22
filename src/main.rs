@@ -2,9 +2,6 @@ mod downloader;
 mod installer;
 mod ui;
 
-use std::sync::Arc;
-
-use tokio::sync::Mutex;
 use tracing::{debug, warn};
 use tracing_subscriber::filter::EnvFilter;
 use ui::{
@@ -74,11 +71,9 @@ fn main() -> iced::Result {
                                 Ok(video_info) => {
                                     worker_to_ui_tx_3.send(UIMessage::InfoFetched(video_info))
                                 }
-                                Err(e) => {
-                                    worker_to_ui_tx_3.send(UIMessage::StatusMessage(
-                                        format!("Failed to fetch video info: {}", e),
-                                    ))
-                                }
+                                Err(e) => worker_to_ui_tx_3.send(UIMessage::StatusMessage(
+                                    format!("Failed to fetch video info: {}", e),
+                                )),
                             };
                         }
                         Ok(UIMessage::FetchThumbnail) => {
@@ -87,11 +82,9 @@ fn main() -> iced::Result {
                                 Ok(path) => {
                                     worker_to_ui_tx_3.send(UIMessage::ThumbnailFetched(Some(path)))
                                 }
-                                Err(e) => {
-                                    worker_to_ui_tx_3.send(UIMessage::StatusMessage(
-                                        format!("Failed to fetch video thumbnail: {}", e),
-                                    ))
-                                }
+                                Err(e) => worker_to_ui_tx_3.send(UIMessage::StatusMessage(
+                                    format!("Failed to fetch video thumbnail: {}", e),
+                                )),
                             };
                         }
                         Ok(UIMessage::SelectAudioFormat(format)) => {
@@ -103,15 +96,15 @@ fn main() -> iced::Result {
                         Ok(UIMessage::DownloadVideo) => {
                             debug!("Worker thread received DownloadVideo message.");
                             let worker_to_ui_tx_4 = worker_to_ui_tx.clone();
-                            let _ = match download_video(&mut video_downloader, &worker_to_ui_tx_4).await {
+                            let _ = match download_video(&mut video_downloader, &worker_to_ui_tx_4)
+                                .await
+                            {
                                 Ok(path) => {
                                     worker_to_ui_tx_3.send(UIMessage::VideoDownloaded(Some(path)))
                                 }
-                                Err(e) => {
-                                    worker_to_ui_tx_3.send(UIMessage::StatusMessage(
-                                        format!("Failed to download video: {}", e),
-                                    ))
-                                }
+                                Err(e) => worker_to_ui_tx_3.send(UIMessage::StatusMessage(
+                                    format!("Failed to download video: {}", e),
+                                )),
                             };
                         }
                         Ok(UIMessage::Number(number)) => {
@@ -128,41 +121,8 @@ fn main() -> iced::Result {
             })
     });
 
-    // std::thread::spawn(move || {
-    //     tokio::runtime::Builder::new_current_thread()
-    //         .enable_all()
-    //         .build()
-    //         .unwrap()
-    //         .block_on(async move {
-    //             loop {
-    //                 let result_msg = worker_from_ui_rx_1.recv().await;
-    //                 match result_msg {
-    //                     Ok(msg) => {
-    //                         println!("Worker received message: {:?}", msg);
-    //                     }
-    //                     Err(e) => {
-    //                         println!("Worder received error: {}", e);
-    //                     }
-    //                 }
-    //             }
-    //         })
-    // });
-
-    // std::thread::spawn(move || {
-    //     let mut n = 0;
-    //     loop {
-    //         n += 1;
-    //         println!("sending from worker thread {}", n);
-    //         let _ = worker_to_ui_tx.send(ui::message::Message::Number(n));
-    //         // tx.send(ui::message::Message::Number(n));
-    //         std::thread::sleep(std::time::Duration::from_secs(10));
-    //     }
-    // });
-
-    let mut iced_application =
+    let iced_application =
         iced::application("YouTube Downloader", ui::update::update, ui::view::view)
-            // .subscription(ui::subscription::subscription)
-            // .subscription(move |_| subscription(Arc::clone(&ui_from_worker_receiver)))
             .subscription(move |_| ui_subscription(worker_to_ui_tx_2.clone()))
             .theme(|_| iced::Theme::Dark)
             .centered();

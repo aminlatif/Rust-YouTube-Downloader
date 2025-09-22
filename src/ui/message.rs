@@ -1,4 +1,3 @@
-use iced::Size;
 use std::path::PathBuf;
 use yt_dlp::model::Video;
 
